@@ -15,9 +15,14 @@ const helper = require('../../../common/helper');
 
 const logger = helper.getLogger('FabricUtils');
 
-async function createFabricClient(client_configs, client_name, persistence) {
+async function createFabricClient(
+	client_configs,
+	network_name,
+	client_name,
+	persistence
+) {
 	// Create new FabricClient
-	const client = new FabricClient(client_name);
+	const client = new FabricClient(network_name, client_name);
 	// Initialize fabric client
 	logger.debug(
 		'************ Initializing fabric client for [%s]************',
@@ -31,11 +36,16 @@ async function createFabricClient(client_configs, client_name, persistence) {
 	}
 }
 
-async function createDetachClient(client_configs, client_name, persistence) {
+async function createDetachClient(
+	client_configs,
+	network_name,
+	client_name,
+	persistence
+) {
 	// Clone global.hfc.config configuration
 	const client_config = cloneConfig(client_configs, client_name);
 
-	const client = new FabricClient(client_name);
+	const client = new FabricClient(network_name, client_name);
 	await client.initializeDetachClient(client_config, persistence);
 	return client;
 }
@@ -83,67 +93,6 @@ function processTLS_URL(client_config) {
 			: `grpc${url.substring(url.indexOf('://'))}`;
 	}
 	return client_config;
-}
-
-/**
- *
- *
- * @param {*} network_configs
- * @returns
- */
-async function setAdminEnrolmentPath(network_configs) {
-	for (const network_name in network_configs) {
-		network_configs[network_name] = setOrgEnrolmentPath(
-			network_configs[network_name]
-		);
-	}
-	return network_configs;
-}
-
-/**
- *
- *
- * @param {*} network_config
- * @returns
- */
-function setOrgEnrolmentPath(network_config) {
-	if (network_config && network_config.organizations) {
-		for (const organization_name in network_config.organizations) {
-			/*
-			 * Checking files path is defined as full path or directory
-			 * If directory, then it will consider the first file
-			 */
-			const organization = network_config.organizations[organization_name];
-			if (!organization.fullpath) {
-				// Setting admin private key as first file from keystore dir
-				logger.debug(
-					'Organization [%s] enrolment files path defined as directory',
-					organization_name
-				);
-				if (organization.adminPrivateKey) {
-					const privateKeyPath = organization.adminPrivateKey.path;
-					const files = fs.readdirSync(privateKeyPath);
-					if (files && files.length > 0) {
-						organization.adminPrivateKey.path = path.join(privateKeyPath, files[0]);
-					}
-				}
-				// Setting admin private key as first file from signcerts dir
-				if (organization.signedCert) {
-					const signedCertPath = organization.signedCert.path;
-					const files = fs.readdirSync(signedCertPath);
-					if (files && files.length > 0) {
-						organization.signedCert.path = path.join(signedCertPath, files[0]);
-					}
-				}
-			} else {
-				logger.debug(
-					'Organization [%s] enrolment files path defined as full path',
-					organization_name
-				);
-			}
-		}
-	}
-	return network_config;
 }
 
 /**
@@ -217,7 +166,6 @@ function getPEMfromConfig(config) {
 				result = utils.normalizeX509(result);
 			} catch (e) {
 				logger.error(e);
-				console.error(e);
 			}
 		}
 	}
@@ -242,8 +190,6 @@ function readFileSync(config_path) {
 	}
 }
 
-exports.setAdminEnrolmentPath = setAdminEnrolmentPath;
-exports.setOrgEnrolmentPath = setOrgEnrolmentPath;
 exports.generateBlockHash = generateBlockHash;
 exports.createFabricClient = createFabricClient;
 exports.getBlockTimeStamp = getBlockTimeStamp;

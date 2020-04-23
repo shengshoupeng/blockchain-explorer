@@ -21,6 +21,7 @@ import Login from '../Login';
 
 import Private from '../Route';
 
+/* istanbul ignore next */
 const styles = theme => {
 	const { type } = theme.palette;
 	const dark = type === 'dark';
@@ -47,14 +48,17 @@ export class App extends Component {
 		};
 	}
 
+	/* istanbul ignore next */
 	updateLoadStatus = () => {
 		this.setState({ loading: false });
 	};
 
+	/* istanbul ignore next */
 	refreshComponent = mode => {
 		this.props.changeTheme(mode);
 	};
 
+	/* istanbul ignore next */
 	render() {
 		const { auth } = this.props;
 		const { loading } = this.state;
@@ -88,6 +92,7 @@ const { changeTheme } = themeActions;
 const { errorMessageSelector } = chartSelectors;
 const { authSelector } = authSelectors;
 
+/* istanbul ignore next */
 export default compose(
 	withStyles(styles),
 	connect(

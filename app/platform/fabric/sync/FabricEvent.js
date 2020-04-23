@@ -43,10 +43,6 @@ class FabricEvent {
 			}
 
 			this.createChannelEventHub(channel);
-			logger.debug(
-				'initialize() - Successfully created channel event hub for [%s]',
-				channel_name
-			);
 		}
 	}
 
@@ -68,12 +64,15 @@ class FabricEvent {
 			},
 			err => {
 				logger.error('Block Event %s', err);
-				console.error(err);
 			}
 		);
 		this.connectChannelEventHub(channel.getName(), eventHub);
 		// Set channel event hub to map
 		FabricEvent.channelEventHubs.set(channel.getName(), eventHub);
+		logger.debug(
+			'Successfully created channel event hub for [%s]',
+			channel.getName()
+		);
 	}
 	/* eslint-disable */
 	/**
@@ -106,7 +105,6 @@ class FabricEvent {
 				}
 			} catch (err) {
 				logger.error('Failed to get the channel ', err);
-				console.error('Failed to get the channel ', err);
 			}
 			return false;
 		}

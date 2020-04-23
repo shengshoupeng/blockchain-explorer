@@ -61,11 +61,6 @@ class SyncPlatform {
 			this.client_name
 		);
 
-		setTimeout(() => {
-			console.log('SyncPlatform initialize()-- @ ', new Date().toDateString());
-			this.initialize(args);
-		}, 30000);
-
 		// Loading the config.json
 		const all_config = JSON.parse(fs.readFileSync(config_path, 'utf8'));
 		const network_configs = all_config[fabric_const.NETWORK_CONFIGS];
@@ -85,8 +80,8 @@ class SyncPlatform {
 			this.client_name = args[1];
 		}
 
-		console.log(
-			`\n${explorer_mess.message.MESSAGE_1002}`,
+		logger.info(
+			explorer_mess.message.MESSAGE_1002,
 			this.network_name,
 			this.client_name
 		);
@@ -99,23 +94,29 @@ class SyncPlatform {
 		global.hfc.config.set('discovery-cache-life', this.blocksSyncTime);
 		global.hfc.config.set('initialize-with-discovery', true);
 
-		const client_configs = network_configs[this.network_name];
-
-		this.client_configs = await FabricUtils.setOrgEnrolmentPath(client_configs);
+		this.client_configs = network_configs[this.network_name];
 
 		this.client = await FabricUtils.createFabricClient(
 			this.client_configs,
+			this.network_name,
 			this.client_name
 		);
 		if (!this.client) {
 			throw new ExplorerError(explorer_mess.error.ERROR_2011);
 		}
 
+		this.client.network_name = this.network_name;
+
 		// Updating the client network and other details to DB
 		const res = await this.syncService.synchNetworkConfigToDB(this.client);
 		if (!res) {
 			return;
 		}
+
+		setInterval(() => {
+			logger.info('Updating the client network and other details to DB');
+			this.syncService.synchNetworkConfigToDB(this.client);
+		}, 30000);
 
 		// Start event
 		this.eventHub = new FabricEvent(this.client, this.syncService);

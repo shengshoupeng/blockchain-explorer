@@ -64,8 +64,19 @@ class SyncServices {
 	 */
 	async synchNetworkConfigToDB(client) {
 		const channels = client.getChannels();
+		const channels_query = await client.hfc_client.queryChannels(
+			client.defaultPeer,
+			true
+		);
+		for (const channel of channels_query.channels) {
+			const channel_name = channel.channel_id;
+			if (!channels.get(channel_name)) {
+				await client.initializeNewChannel(channel_name);
+			}
+		}
+
 		for (const [channel_name, channel] of channels.entries()) {
-			console.log(
+			logger.info(
 				'SyncServices.synchNetworkConfigToDB client ',
 				client.client_name,
 				' channel_name ',
@@ -107,15 +118,15 @@ class SyncServices {
 	 */
 	async insertNewChannel(client, channel, block, channel_genesis_hash) {
 		const channel_name = channel.getName();
-
+		const network_name = client.network_name;
 		const channelInfo = await this.persistence
 			.getCrudService()
-			.getChannel(channel_name, channel_genesis_hash);
+			.getChannel(network_name, channel_name, channel_genesis_hash);
 
 		if (!channelInfo) {
 			const count = await this.persistence
 				.getCrudService()
-				.existChannel(channel_name);
+				.existChannel(network_name, channel_name);
 			if (count.count === '0') {
 				if (block.data && block.data.data.length > 0 && block.data.data[0]) {
 					const createdt = await FabricUtils.getBlockTimeStamp(
@@ -130,7 +141,9 @@ class SyncServices {
 						channel_version: block.data.data[0].payload.header.channel_header.version,
 						channel_genesis_hash
 					};
-					await this.persistence.getCrudService().saveChannel(channel_row);
+					await this.persistence
+						.getCrudService()
+						.saveChannel(network_name, channel_row);
 				}
 			} else {
 				const notify = {
@@ -200,6 +213,7 @@ class SyncServices {
 	async insertNewPeer(peer, channel_genesis_hash, client) {
 		let eventurl = '';
 		let requesturl = peer.endpoint;
+		const network_name = client.network_name;
 		const host_port = peer.endpoint.split(':');
 		if (
 			client.client_config.peers &&
@@ -218,18 +232,20 @@ class SyncServices {
 
 		const peer_row = {
 			mspid: peer.mspid,
-			requests: requesturl,
+			requests: requesturl.replace(/^grpcs*:\/\//, ''),
 			events: eventurl,
 			server_hostname: host_port[0],
 			channel_genesis_hash,
 			peer_type: 'PEER'
 		};
-		await this.persistence.getCrudService().savePeer(peer_row);
+		await this.persistence.getCrudService().savePeer(network_name, peer_row);
 		const channel_peer_row = {
 			peerid: host_port[0],
 			channelid: channel_genesis_hash
 		};
-		await this.persistence.getCrudService().savePeerChannelRef(channel_peer_row);
+		await this.persistence
+			.getCrudService()
+			.savePeerChannelRef(network_name, channel_peer_row);
 	}
 
 	/**
@@ -241,11 +257,12 @@ class SyncServices {
 	 * @memberof SyncServices
 	 */
 	async insertNewOrderers(orderer, channel_genesis_hash, client) {
+		const network_name = client.network_name;
 		const discoveryProtocol = client.hfc_client.getConfigSetting(
 			'discovery-protocol'
 		);
 		const requesturl = `${discoveryProtocol}://${orderer.host}:${orderer.port}`;
-		console.log(
+		logger.debug(
 			'insertNewOrderers discoveryProtocol ',
 			discoveryProtocol,
 			' requesturl ',
@@ -254,19 +271,19 @@ class SyncServices {
 
 		const orderer_row = {
 			mspid: orderer.org_name,
-			requests: requesturl,
+			requests: requesturl.replace(/^grpcs*:\/\//, ''),
 			server_hostname: orderer.host,
 			channel_genesis_hash,
 			peer_type: 'ORDERER'
 		};
-		await this.persistence.getCrudService().savePeer(orderer_row);
+		await this.persistence.getCrudService().savePeer(network_name, orderer_row);
 		const channel_orderer_row = {
 			peerid: orderer.host,
 			channelid: channel_genesis_hash
 		};
 		await this.persistence
 			.getCrudService()
-			.savePeerChannelRef(channel_orderer_row);
+			.savePeerChannelRef(network_name, channel_orderer_row);
 	}
 
 	/**
@@ -284,6 +301,7 @@ class SyncServices {
 		channel_genesis_hash,
 		discoveryResults
 	) {
+		const network_name = client.network_name;
 		const chaincodes = await channel.queryInstantiatedChaincodes(
 			client.getDefaultPeer(),
 			true
@@ -297,7 +315,9 @@ class SyncServices {
 				createdt: new Date(),
 				channel_genesis_hash
 			};
-			await this.persistence.getCrudService().saveChaincode(chaincode_row);
+			await this.persistence
+				.getCrudService()
+				.saveChaincode(network_name, chaincode_row);
 			if (discoveryResults && discoveryResults.peers_by_org) {
 				for (const org_name in discoveryResults.peers_by_org) {
 					const org = discoveryResults.peers_by_org[org_name];
@@ -308,6 +328,7 @@ class SyncServices {
 								c_code.version === chaincode.version
 							) {
 								await this.insertNewChaincodePeerRef(
+									client,
 									c_code,
 									peer.endpoint,
 									channel_genesis_hash
@@ -328,7 +349,13 @@ class SyncServices {
 	 * @param {*} channel_genesis_hash
 	 * @memberof SyncServices
 	 */
-	async insertNewChaincodePeerRef(chaincode, endpoint, channel_genesis_hash) {
+	async insertNewChaincodePeerRef(
+		client,
+		chaincode,
+		endpoint,
+		channel_genesis_hash
+	) {
+		const network_name = client.network_name;
 		const host_port = endpoint.split(':');
 		const chaincode_peer_row = {
 			chaincodeid: chaincode.name,
@@ -338,10 +365,11 @@ class SyncServices {
 		};
 		await this.persistence
 			.getCrudService()
-			.saveChaincodPeerRef(chaincode_peer_row);
+			.saveChaincodPeerRef(network_name, chaincode_peer_row);
 	}
 
 	async synchBlocks(client, channel) {
+		const network_name = client.network_name;
 		const client_name = client.getClientName();
 		const channel_name = channel.getName();
 
@@ -362,7 +390,7 @@ class SyncServices {
 		// Query missing blocks from DB
 		const results = await this.persistence
 			.getMetricService()
-			.findMissingBlockNumber(channel_genesis_hash, blockHeight);
+			.findMissingBlockNumber(network_name, channel_genesis_hash, blockHeight);
 
 		if (results) {
 			for (const result of results) {
@@ -389,6 +417,7 @@ class SyncServices {
 	 * @memberof SyncServices
 	 */
 	async processBlockEvent(client, block) {
+		const network_name = client.network_name;
 		const _self = this;
 		// Get the first transaction
 		const first_tx = block.data.data[0];
@@ -477,7 +506,8 @@ class SyncServices {
 				createdt,
 				prev_blockhash: '',
 				blockhash,
-				channel_genesis_hash
+				channel_genesis_hash,
+				blksize: jsonObjSize(block)
 			};
 			const txLen = block.data.data.length;
 			for (let i = 0; i < txLen; i++) {
@@ -621,21 +651,24 @@ class SyncServices {
 					endorser_signature,
 					creator_id_bytes,
 					payload_proposal_hash,
-					endorser_id_bytes
+					endorser_id_bytes,
+					network_name
 				};
 
 				// Insert transaction
 
 				const res = await this.persistence
 					.getCrudService()
-					.saveTransaction(transaction_row);
-				console.log('saveTransaction ', res);
+					.saveTransaction(network_name, transaction_row);
+				logger.debug('saveTransaction ', res);
 			}
 
 			// Insert block
-			console.log('block_row.blocknum ', block_row.blocknum);
-			const status = await this.persistence.getCrudService().saveBlock(block_row);
-			console.debug('status ', status);
+			logger.info('block_row.blocknum ', block_row.blocknum);
+			const status = await this.persistence
+				.getCrudService()
+				.saveBlock(network_name, block_row);
+			logger.debug('status ', status);
 
 			if (status) {
 				// Push last block
@@ -651,13 +684,14 @@ class SyncServices {
 					} tx`,
 					time: createdt,
 					txcount: block.data.data.length,
-					datahash: block.header.data_hash
+					datahash: block.header.data_hash,
+					blksize: block_row.blksize
 				};
 
 				_self.platform.send(notify);
 			}
 		} else {
-			console.error('Failed to process the block %j', block);
+			logger.error('Failed to process the block %j', block);
 			logger.error('Failed to process the block %j', block);
 		}
 		const index = blocksInProcess.indexOf(blockPro_key);
@@ -700,4 +734,50 @@ function convertValidationCode(code) {
 		return code;
 	}
 	return _validation_codes[code];
+}
+
+// Calculate data size of json object
+function jsonObjSize(json) {
+	let bytes = 0;
+
+	function sizeOf(obj) {
+		if (obj !== null && obj !== undefined) {
+			switch (typeof obj) {
+				case 'number': {
+					bytes += 8;
+					break;
+				}
+				case 'string': {
+					bytes += obj.length;
+					break;
+				}
+				case 'boolean': {
+					bytes += 4;
+					break;
+				}
+				case 'object': {
+					const objClass = Object.prototype.toString.call(obj).slice(8, -1);
+					if (objClass === 'Object' || objClass === 'Array') {
+						for (const key in obj) {
+							if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+							sizeOf(obj[key]);
+						}
+					} else {
+						bytes += obj.length;
+					}
+					break;
+				}
+				default:
+					logger.debug(typeof obj);
+					break;
+			}
+		}
+		return bytes;
+	}
+
+	function formatByteSize(rawByte) {
+		return (rawByte / 1024).toFixed(0);
+	}
+
+	return formatByteSize(sizeOf(json));
 }

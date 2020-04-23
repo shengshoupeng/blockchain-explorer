@@ -33,8 +33,7 @@ const login = ({ user, password }, network) => dispatch =>
 const network = () => dispatch =>
 	get('/auth/networklist', {})
 		.then(({ networkList }) => {
-			const networks = networkList.map(network => network[0]);
-			dispatch(networkAction({ networks }));
+			dispatch(networkAction({ networks: networkList }));
 		})
 		.catch(error => {
 			// eslint-disable-next-line no-console
@@ -65,8 +64,23 @@ const register = user => dispatch =>
 			dispatch(errorAction(error));
 		});
 
+const logout = () => dispatch =>
+	post('/auth/logout', {})
+		.then(resp => {
+			console.log(resp);
+			Auth.deauthenticateUser();
+			dispatch(errorAction(null));
+			return { status: 'Success' };
+		})
+		.catch(error => {
+			console.error(error);
+			dispatch(actions.getErroMessage(error));
+			return { status: 'Error', message: 'Invalid User token' };
+		});
+
 export default {
 	login,
 	network,
-	register
+	register,
+	logout
 };

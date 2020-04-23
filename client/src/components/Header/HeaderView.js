@@ -72,6 +72,7 @@ const {
 const { currentChannelSelector } = chartSelectors;
 const { channelsSelector } = tableSelectors;
 
+/* istanbul ignore next */
 const styles = theme => {
 	const { type } = theme.palette;
 	const dark = type === 'dark';
@@ -172,10 +173,10 @@ const styles = theme => {
 				marginTop: 15
 			}
 		},
-		signout: {
+		logout: {
 			marginRight: -3
 		},
-		signoutIcon: {
+		logoutIcon: {
 			color: dark ? 'rgb(139, 143, 148)' : '#5f6164',
 			fontSize: '18pt',
 			float: 'none',
@@ -297,6 +298,7 @@ export class HeaderView extends Component {
 		}
 
 		this.setState({
+			currentChannel: currentChannel,
 			channels: options,
 			isLoading: false,
 			selectedChannel: selectedValue
@@ -350,6 +352,13 @@ export class HeaderView extends Component {
 
 	onRegister = () => {
 		this.registerClose();
+	};
+
+	logout = async () => {
+		const result = await this.props.logout();
+		if (result.status === 'Success') {
+			window.location = '/';
+		}
 	};
 
 	/**enrollOpen = () => {
@@ -567,6 +576,13 @@ export class HeaderView extends Component {
 											onClick={() => this.registerOpen()}
 										/>
 									</div>
+									<div className={classNames(classes.adminButton, classes.logoutk)}>
+										<FontAwesome
+											name="sign-out"
+											className={classes.logout}
+											onClick={() => this.logout()}
+										/>
+									</div>
 								</Nav>
 							</Collapse>
 						</Navbar>
@@ -662,7 +678,8 @@ export default compose(
 			getTransactionByOrg: transactionByOrg,
 			getTransactionList: transactionList,
 			getTransactionPerHour: transactionPerHour,
-			getTransactionPerMin: transactionPerMin
+			getTransactionPerMin: transactionPerMin,
+			logout: authOperations.logout
 		}
 	)
 )(HeaderView);
